@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="เช็คชื่อ">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#a8d8ea">
+<title>ระบบเช็คชื่อการเข้าเรียน</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23a8d8ea'/><text y='70' x='50' text-anchor='middle' font-size='58'>📚</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0"></script>
+<style>
+:root{
+  --bg:#fbfaf8;--card:#fff;--ink:#4a4a55;--muted:#9a9aa6;--line:#efeceb;
+  --pri:#a8d8ea;--pri-d:#5fa8c4;
+  --ok:#c9ecd6;--ok-d:#3f9d64;
+  --absent:#f8cfcf;--absent-d:#c95d5d;
+  --late:#fbe6b8;--late-d:#b8861f;
+  --leave:#e0d8f7;--leave-d:#7a64c2;
+  --radius:18px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px);
+  --safe-right:env(safe-area-inset-right,0px);
+  --nav-h:64px;
+}
+html,body{height:100%;margin:0}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Sarabun',system-ui,sans-serif;
+  background:var(--bg);color:var(--ink);
+  display:flex;flex-direction:column;
+  padding-top:var(--safe-top);
+  padding-bottom:calc(var(--safe-bottom) + var(--nav-h));
+  padding-left:var(--safe-left);
+  padding-right:var(--safe-right);
+  overscroll-behavior:none;
+}
+header{
+  position:sticky;top:0;z-index:30;
+  background:var(--card);border-bottom:1px solid var(--line);
+  padding:12px 20px 10px;
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+h1{font-size:18px;margin:0;font-weight:600;line-height:1.2}
+.subtitle{color:var(--muted);font-size:13px;margin-top:2px}
+nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:40;
+  background:var(--card);border-top:1px solid var(--line);
+  display:flex;
+  padding-bottom:var(--safe-bottom);
+  padding-left:var(--safe-left);
+  padding-right:var(--safe-right);
+}
+nav button{
+  flex:1;border:none;background:transparent;font:inherit;
+  padding:10px 4px 8px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--muted);cursor:pointer;font-size:11px;transition:color .15s;
+  min-height:52px;min-width:44px;touch-action:manipulation;
+}
+nav button .icon{font-size:22px;line-height:1}
+nav button.on{color:var(--pri-d)}
+nav button.on .icon{background:var(--pri);border-radius:12px;padding:3px 14px}
+main{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:16px 16px 8px;
+  max-width:740px;width:100%;margin:0 auto;
+}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+h2{font-size:17px;font-weight:600;margin:0 0 12px}
+.grid-2{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+.grid-auto{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.stat{border-radius:14px;padding:14px 16px}
+.stat .lbl{font-size:13px;display:flex;align-items:center;gap:5px}
+.stat b{display:block;font-size:24px;font-weight:600;margin-top:4px}
+label.field{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
+input,select,textarea{
+  font:inherit;font-size:15px;padding:12px 14px;
+  border:1px solid var(--line);border-radius:12px;
+  background:#fff;color:var(--ink);outline:none;
+  -webkit-appearance:none;min-height:48px;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--pri-d)}
+textarea{min-height:110px;resize:vertical}
+select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239a9aa6' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;
+}
+.btn{
+  border:none;font:inherit;font-size:15px;
+  padding:13px 20px;border-radius:999px;
+  background:var(--pri);color:#2d4a57;
+  cursor:pointer;font-weight:500;
+  min-height:48px;min-width:48px;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  -webkit-user-select:none;user-select:none;
+  transition:transform .1s;touch-action:manipulation;
+}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.sm{font-size:13px;padding:8px 14px;min-height:36px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* ===== เช็คชื่อ: row ไม่ reflow ===== */
+.attend-row{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:10px;padding:12px 0;border-bottom:1px solid var(--line);
+}
+.attend-row:last-child{border-bottom:none}
+.who{display:flex;align-items:center;gap:10px;font-weight:500;flex:1;min-width:0}
+.no{min-width:30px;height:30px;border-radius:50%;background:#f3f1ef;display:grid;place-items:center;font-size:13px;color:var(--muted);flex-shrink:0}
+.who-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.pills{display:flex;gap:5px;flex-shrink:0}
+.pill{
+  border:none;border-radius:999px;padding:8px 11px;
+  font:inherit;font-size:13px;font-weight:500;
+  cursor:pointer;background:#f5f3f1;color:var(--muted);
+  transition:background .12s,color .12s,transform .1s;
+  min-height:44px;min-width:44px;
+  display:inline-flex;align-items:center;gap:4px;
+  touch-action:manipulation;-webkit-user-select:none;user-select:none;
+}
+.pill:active{transform:scale(.93)}
+.pill.ok{color:var(--ok-d)}.pill.absent{color:var(--absent-d)}.pill.late{color:var(--late-d)}.pill.leave{color:var(--leave-d)}
+.pill.on.ok{background:var(--ok);color:#2e6e47}
+.pill.on.absent{background:var(--absent);color:#8c3c3c}
+.pill.on.late{background:var(--late);color:#7a5a12}
+.pill.on.leave{background:var(--leave);color:#4f3e92}
+
+/* stat summary bar */
+.sum-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.sum-chip{flex:1;min-width:70px;border-radius:14px;padding:10px 12px;text-align:center}
+.sum-chip .lbl{font-size:12px}.sum-chip b{font-size:20px;font-weight:600;display:block;margin-top:2px}
+
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;margin:2px}
+.badge.warn{background:var(--late);color:#7a5a12}
+.badge.danger{background:var(--absent);color:#8c3c3c}
+.badge.info{background:#e8f0fe;color:#3d5a99}
+.bar{height:8px;background:#f1efec;border-radius:99px;overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;background:var(--pri-d);border-radius:99px}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:400px}
+th,td{padding:9px 7px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:500}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.row:last-child{border-bottom:none}
+.empty{text-align:center;color:var(--muted);padding:36px 0;line-height:1.8}
+.note{color:var(--muted);font-size:13px;margin-top:10px;line-height:1.6}
+.hero{background:linear-gradient(135deg,#e6f4fa,#f6f0fb);border:none;border-radius:var(--radius);padding:18px 16px;margin-bottom:14px}
+.skel{height:110px;border-radius:var(--radius);background:linear-gradient(90deg,#f1efec 25%,#f8f6f4 50%,#f1efec 75%);background-size:200% 100%;animation:sh 1.2s infinite;margin-bottom:14px}
+@keyframes sh{to{background-position:-200% 0}}
+.overlay{position:fixed;inset:0;background:rgba(251,250,248,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:60;color:var(--ink)}
+.overlay.show{display:flex}
+.spin{width:44px;height:44px;border-radius:50%;border:4px solid #dfeff6;border-top-color:var(--pri-d);animation:r 1s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+#toasts{position:fixed;bottom:calc(var(--safe-bottom) + var(--nav-h) + 12px);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:70;width:90%;max-width:380px;pointer-events:none}
+.toast{background:var(--card);border:1px solid var(--line);box-shadow:0 4px 20px rgba(0,0,0,.1);padding:12px 18px;border-radius:999px;font-size:14px;animation:up .3s ease;text-align:center}
+@keyframes up{from{opacity:0;transform:translateY(10px)}}
+footer.site{display:flex;justify-content:center;padding:18px 20px 8px;margin-top:8px}
+footer.site .frame{border:1.5px solid var(--pri-d);border-radius:14px;padding:8px 20px;color:var(--muted);font-size:13px;background:var(--card);text-align:center}
+
+/* upload zone */
+.upload-zone{border:2px dashed var(--line);border-radius:14px;padding:24px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--pri-d);background:#f0f9fc}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone .icon{font-size:32px;margin-bottom:8px}
+.upload-zone p{margin:4px 0;color:var(--muted);font-size:14px}
+
+/* CSV preview */
+.csv-preview{background:#f8f9fa;border-radius:12px;padding:12px;margin-top:12px;font-size:13px;max-height:180px;overflow-y:auto}
+.csv-preview table{min-width:unset;font-size:13px}
+.csv-preview th,.csv-preview td{padding:5px 8px;white-space:nowrap}
+
+/* PDF */
+#printArea{display:none}
+.report{font-family:'Sarabun',sans-serif;color:#000;padding:8px 4px}
+.report .cls{break-inside:auto}
+.report .cls.newpage{break-before:page;page-break-before:always}
+.report .rh{margin-bottom:12px}
+.report .rh h1{font-size:20px;text-align:center;margin:0 0 10px;font-weight:700}
+.report .rh p{margin:3px 0;font-size:13px}
+.report table{font-size:12px;margin-top:8px;min-width:unset}
+.report thead{display:table-header-group}
+.report tr{break-inside:avoid;page-break-inside:avoid}
+.report th,.report td{border:1px solid #ccc;padding:5px 6px;color:#000;white-space:normal}
+.report .credit{text-align:center;margin-top:18px;font-size:12px}
+.report .credit span{border:1px solid #666;border-radius:8px;padding:4px 14px;display:inline-block}
+@media print{
+  body>*:not(#printArea){display:none!important}
+  #printArea{display:block!important}
+  @page{size:A4 portrait;margin:14mm}
+}
+@media(min-width:640px){
+  nav{position:fixed;bottom:unset;left:0;top:0;flex-direction:column;width:72px;height:100vh;border-top:none;border-right:1px solid var(--line);padding:8px 4px;padding-top:calc(var(--safe-top)+8px);padding-bottom:calc(var(--safe-bottom)+8px)}
+  nav button{min-height:56px;padding:8px 4px;gap:4px}
+  body{padding-left:72px;padding-bottom:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📚 เช็คชื่อการเข้าเรียน</h1>
+    <div class="subtitle">ภาคเรียนที่ 2 ปีการศึกษา 2569</div>
+  </div>
+  <div id="clock" style="color:var(--muted);font-size:13px;text-align:right;flex-shrink:0"></div>
+</header>
+<nav id="nav">
+  <button data-v="home" onclick="go('home')"><span class="icon">🏠</span><span>หลัก</span></button>
+  <button data-v="checkin" onclick="go('checkin')"><span class="icon">✏️</span><span>เช็คชื่อ</span></button>
+  <button data-v="stats" onclick="go('stats')"><span class="icon">📊</span><span>สถิติ</span></button>
+  <button data-v="alerts" onclick="go('alerts')"><span class="icon">🔔</span><span>แจ้งเตือน</span></button>
+  <button data-v="manage" onclick="go('manage')"><span class="icon">🗂️</span><span>จัดการ</span></button>
+  <button data-v="export" onclick="go('export')"><span class="icon">📤</span><span>ส่งออก</span></button>
+</nav>
+<main id="main"></main>
+<footer class="site"><div class="frame">พัฒนาระบบโดย ครูอารดา รัตนนภาลัย</div></footer>
+<div class="overlay" id="overlay"><div class="spin"></div><div id="busyMsg" style="font-size:15px"></div></div>
+<div id="toasts"></div>
+<div id="printArea"></div>
+
+<script>
+/* ===== ข้อมูล ===== */
+const STATUS={
+  present:{label:'มา',icon:'🌷',cls:'ok'},
+  absent:{label:'ขาด',icon:'🌧️',cls:'absent'},
+  late:{label:'สาย',icon:'⏰',cls:'late'},
+  leave:{label:'ลา',icon:'🍃',cls:'leave'}
+};
+const THRESHOLDS=[3,5,10];
+
+// ===== Supabase Setup =====
+const SUPABASE_URL='https://vrlcnajoiapgfpyslzbd.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxMDgxNzksImV4cCI6MTc0ODY4MDE3OX0.LK3X-zJxKmgUx8KI3iZpPKiBxU9Z8V7sXxW1l5JvZrU';
+
+const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+const db={
+  courses:[],
+  classes:[],
+  students:[],
+  sessions:{}
+};
+
+async function initData(){
+  try{
+    // ดึงวิชาทั้งหมด
+    const{data:coursesData}=await supabase.from('courses').select('*');
+    db.courses=coursesData||[];
+
+    // ดึงห้องทั้งหมด
+    const{data:classesData}=await supabase.from('classes').select('*');
+    db.classes=classesData||[];
+
+    // ดึงนักเรียนทั้งหมด
+    const{data:studentsData}=await supabase.from('students').select('*');
+    db.students=studentsData||[];
+
+    // ดึงการเช็คชื่อทั้งหมด
+    const{data:attendanceData}=await supabase.from('attendance').select('*');
+    db.sessions={};
+    if(attendanceData){
+      attendanceData.forEach(rec=>{
+        const key=rec.class_id+'|'+rec.date;
+        if(!db.sessions[key])db.sessions[key]={};
+        db.sessions[key][rec.student_id]=rec.status;
+      });
+    }
+
+    // เริ่มหน้า
+    go('home');
+  }catch(err){
+    console.error('Failed to load data:',err);
+    toast('ไม่สามารถเชื่อมฐานข้อมูลได้ กรุณารีเฟรชหน้าเว็บค่ะ');
+  }
+}
+
+/* ===== state ===== */
+const $=s=>document.querySelector(s);
+const uid=()=>Math.random().toString(36).slice(2,8);
+const sKey=(c,d)=>c+'|'+d;
+let view='home';
+let csvPreviewData=null;
+let ui={courseId:'c1',classId:'k1',date:new Date().toISOString().slice(0,10),statsClass:'k1',marks:{}};
+const loadMarks=()=>{ui.marks={...(db.sessions[sKey(ui.classId,ui.date)]||{})}};
+loadMarks();
+
+const courseOf=id=>db.courses.find(c=>c.id===id);
+const courseClasses=id=>db.classes.filter(k=>k.courseId===id);
+const classOf=id=>{const k=db.classes.find(x=>x.id===id);const c=courseOf(k?.courseId);return`${c?.code||''} ${k?.name||''}`.trim()};
+
+function personStats(sid,cid){
+  const c={present:0,absent:0,late:0,leave:0};
+  Object.keys(db.sessions).forEach(k=>{if(!k.startsWith(cid+'|'))return;const st=db.sessions[k][sid];if(st)c[st]++});
+  const counted=c.present+c.absent+c.late;
+  c.total=counted+c.leave;c.rate=counted?Math.round((c.present+c.late)/counted*100):0;
+  return c;
+}
+function classStats(cid){
+  const list=db.students.filter(s=>s.classId===cid).map(s=>({s,p:personStats(s.id,cid)}));
+  const avg=list.length?Math.round(list.reduce((a,b)=>a+b.p.rate,0)/list.length):0;
+  const sessions=Object.keys(db.sessions).filter(k=>k.startsWith(cid+'|')).length;
+  return{list,avg,sessions};
+}
+function alerts(){
+  const out=[];
+  db.students.forEach(s=>{
+    const p=personStats(s.id,s.classId);
+    const a=THRESHOLDS.filter(t=>p.absent>=t).pop();
+    const l=THRESHOLDS.filter(t=>p.late>=t).pop();
+    if(a||l)out.push({s,p,a,l});
+  });
+  return out.sort((x,y)=>((y.a||0)-(x.a||0))||((y.l||0)-(x.l||0)));
+}
+function levelBadge(n,label){
+  const t=THRESHOLDS.filter(x=>n>=x).pop();
+  return t?`<span class="badge ${t>=10?'danger':'warn'}">${label} ${n} · เกณฑ์${t}</span>`:'';
+}
+
+/* ===== nav ===== */
+function sync(){
+  if(!courseOf(ui.courseId))ui.courseId=db.courses[0]?.id;
+  const cls=courseClasses(ui.courseId);
+  if(!cls.some(k=>k.id===ui.classId)){ui.classId=cls[0]?.id;loadMarks();}
+  if(!cls.some(k=>k.id===ui.statsClass))ui.statsClass=cls[0]?.id;
+}
+function skeleton(){return`<div class="skel"></div><div class="skel" style="height:240px"></div>`}
+function go(v){
+  view=v;csvPreviewData=null;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  $('#main').innerHTML=skeleton();
+  setTimeout(render,350);
+}
+function render(){
+  sync();
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
+  $('#main').innerHTML=VIEWS[view]();
+  $('#main').scrollTop=0;
+}
+function toast(msg){
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;
+  $('#toasts').appendChild(t);setTimeout(()=>t.remove(),2800);
+}
+function busy(msg,fn,done){
+  $('#busyMsg').textContent=msg;$('#overlay').classList.add('show');
+  setTimeout(()=>{fn();$('#overlay').classList.remove('show');toast(done);render()},700);
+}
+setInterval(()=>{
+  const d=new Date();
+  const el=$('#clock');
+  if(el)el.innerHTML=d.toLocaleDateString('th-TH',{weekday:'short',day:'numeric',month:'short'})+'<br>'+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+},1000);
+
+/* ===== updateCountBar: อัปเดตตัวเลขโดยไม่ render ทั้งหน้า ===== */
+function updateCountBar(){
+  const list=db.students.filter(s=>s.classId===ui.classId);
+  const cnt={present:0,absent:0,late:0,leave:0};
+  list.forEach(s=>{if(ui.marks[s.id])cnt[ui.marks[s.id]]++});
+  const bar=$('#countBar');
+  if(bar)bar.innerHTML=countBarHtml(cnt);
+}
+function countBarHtml(cnt){
+  return`
+    <div class="sum-chip" style="background:var(--ok)"><span class="lbl">🌷 มา</span><b>${cnt.present}</b></div>
+    <div class="sum-chip" style="background:var(--absent)"><span class="lbl">🌧️ ขาด</span><b>${cnt.absent}</b></div>
+    <div class="sum-chip" style="background:var(--late)"><span class="lbl">⏰ สาย</span><b>${cnt.late}</b></div>
+    <div class="sum-chip" style="background:var(--leave)"><span class="lbl">🍃 ลา</span><b>${cnt.leave}</b></div>`;
+}
+
+/* ===== mark: อัปเดต DOM เฉพาะแถวนั้น ไม่ render ทั้งหน้า ===== */
+function mark(sid,status){
+  ui.marks[sid]=status;
+  /* อัปเดตเฉพาะปุ่มในแถวนั้น */
+  const row=document.querySelector(`.attend-row[data-sid="${sid}"]`);
+  if(row){
+    row.querySelectorAll('.pill').forEach(btn=>{
+      const s=btn.dataset.status;
+      btn.className='pill '+STATUS[s].cls+(status===s?' on':'');
+    });
+  }
+  /* อัปเดต count bar */
+  updateCountBar();
+}
+
+/* ===== allPresent: ไม่ render ทั้งหน้า ===== */
+function allPresent(){
+  db.students.filter(s=>s.classId===ui.classId).forEach(s=>{
+    ui.marks[s.id]='present';
+    const row=document.querySelector(`.attend-row[data-sid="${s.id}"]`);
+    if(row){
+      row.querySelectorAll('.pill').forEach(btn=>{
+        const st=btn.dataset.status;
+        btn.className='pill '+STATUS[st].cls+(st==='present'?' on':'');
+      });
+    }
+  });
+  updateCountBar();
+  toast('ตั้งค่าทั้งห้องเป็นมาเรียนแล้ว 🌷 กดบันทึกเพื่อยืนยัน');
+}
+
+/* ===== VIEWS ===== */
+const VIEWS={
+  home(){
+    const al=alerts();
+    const allRates=db.students.map(s=>personStats(s.id,s.classId).rate);
+    const avg=allRates.length?Math.round(allRates.reduce((a,b)=>a+b,0)/allRates.length):0;
+    const c=courseOf(ui.courseId);
+    return`
+    <div class="hero">
+      <div style="font-size:26px;margin-bottom:6px">🌤️</div>
+      <h2 style="margin:0 0 4px">สวัสดีค่ะ ครูอารดา</h2>
+      <div style="color:var(--muted);font-size:14px">วิชา ${c?.code||''} ${c?.name||''} · ${courseClasses(ui.courseId).length} ห้อง</div>
+    </div>
+    <div class="grid-2" style="margin-bottom:14px">
+      <div class="stat" style="background:#e6f4fa"><span class="lbl">👥 นักเรียนทั้งหมด</span><b>${db.students.length}</b></div>
+      <div class="stat" style="background:#eaf7ee"><span class="lbl">📈 เข้าเรียนเฉลี่ย</span><b>${avg}%</b></div>
+      <div class="stat" style="background:#fdf3dc"><span class="lbl">🔔 แจ้งเตือน</span><b>${al.length}</b></div>
+      <div class="stat" style="background:#f1ecfc"><span class="lbl">📅 คาบที่เช็คแล้ว</span><b>${Object.keys(db.sessions).length}</b></div>
+    </div>
+    <div class="card">
+      <h2>วิชาที่สอน</h2>
+      ${db.courses.map(c=>`
+        <div class="row">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600">${c.code} ${c.name}</div>
+            <div style="color:var(--muted);font-size:13px;margin-top:2px">ภาคเรียนที่ ${c.term} ปีการศึกษา ${c.year}</div>
+            <div style="color:var(--muted);font-size:13px">ครูผู้สอน ${c.teachers.join(', ')}</div>
+          </div>
+          <button class="btn ghost" style="flex-shrink:0" onclick="ui.courseId='${c.id}';go('checkin')">เช็คชื่อ</button>
+        </div>`).join('')}
+    </div>`;
+  },
+
+  checkin(){
+    const cls=courseClasses(ui.courseId);
+    if(!cls.length)return`<div class="card empty">ยังไม่มีห้องในวิชานี้ 🌱<br>ไปเพิ่มที่หน้าจัดการได้เลยค่ะ</div>`;
+    const list=db.students.filter(s=>s.classId===ui.classId);
+    if(!list.length)return`<div class="card empty">ห้องนี้ยังไม่มีรายชื่อนักเรียน 🌱<br>ไปนำเข้าที่หน้าจัดการได้เลยค่ะ</div>`;
+    const cnt={present:0,absent:0,late:0,leave:0};
+    list.forEach(s=>{if(ui.marks[s.id])cnt[ui.marks[s.id]]++});
+    const saved=!!db.sessions[sKey(ui.classId,ui.date)];
+    return`
+    <div class="card">
+      <div style="display:grid;gap:10px">
+        <label class="field">วิชา
+          <select onchange="ui.courseId=this.value;go('checkin')">
+            ${db.courses.map(c=>`<option value="${c.id}" ${c.id===ui.courseId?'selected':''}>${c.code} ${c.name}</option>`).join('')}
+          </select></label>
+        <div class="grid-2">
+          <label class="field">ห้อง
+            <select onchange="ui.classId=this.value;loadMarks();go('checkin')">
+              ${cls.map(k=>`<option value="${k.id}" ${k.id===ui.classId?'selected':''}>${k.name}</option>`).join('')}
+            </select></label>
+          <label class="field">วันที่
+            <input type="date" value="${ui.date}" onchange="ui.date=this.value;loadMarks();go('checkin')"></label>
+        </div>
+      </div>
+    </div>
+    <div id="countBar" class="sum-bar">${countBarHtml(cnt)}</div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <h2 style="margin:0">${cls.find(k=>k.id===ui.classId)?.name||''} · ${list.length} คน</h2>
+          ${saved?'<span class="badge info" style="margin-top:4px;display:inline-block">บันทึกแล้ว ✓</span>':''}
+        </div>
+        <div class="btn-row">
+          <button class="btn ghost sm" onclick="allPresent()">✅ ทั้งห้องมาเรียน</button>
+          <button class="btn sm" onclick="saveAttendance()">💾 บันทึก</button>
+        </div>
+      </div>
+      ${list.map(s=>`
+        <div class="attend-row" data-sid="${s.id}">
+          <div class="who">
+            <span class="no">${s.no}</span>
+            <div>
+              <div class="who-name" style="font-size:15px">${s.name}</div>
+              <div style="font-size:12px;color:var(--muted);font-weight:400">${s.studentId||''}</div>
+            </div>
+          </div>
+          <div class="pills">
+            ${Object.entries(STATUS).map(([k,v])=>`
+              <button class="pill ${v.cls} ${ui.marks[s.id]===k?'on':''}" data-status="${k}" onclick="mark('${s.id}','${k}')">${v.icon}<span style="font-size:12px">${v.label}</span></button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  },
+
+  stats(){
+    const cls=courseClasses(ui.courseId);
+    const k=cls.find(x=>x.id===ui.statsClass);
+    if(!k)return`<div class="card empty">ยังไม่มีข้อมูลห้องเรียน</div>`;
+    const cs=classStats(k.id);
+    const totalAbs=cs.list.reduce((a,b)=>a+b.p.absent,0);
+    const totalLate=cs.list.reduce((a,b)=>a+b.p.late,0);
+    return`
+    <div class="card" style="padding:12px 14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${cls.map(c=>`<button class="pill ${c.id===k.id?'on ok':''}" onclick="ui.statsClass='${c.id}';go('stats')">${c.name}</button>`).join('')}
+      </div>
+    </div>
+    <div class="grid-2" style="margin-bottom:14px">
+      <div class="stat" style="background:#eaf7ee"><span class="lbl">📈 เข้าเรียนเฉลี่ย</span><b>${cs.avg}%</b></div>
+      <div class="stat" style="background:#e6f4fa"><span class="lbl">📅 คาบ</span><b>${cs.sessions}</b></div>
+      <div class="stat" style="background:var(--absent)"><span class="lbl">🌧️ ขาดรวม</span><b>${totalAbs}</b></div>
+      <div class="stat" style="background:var(--late)"><span class="lbl">⏰ สายรวม</span><b>${totalLate}</b></div>
+    </div>
+    <div class="card">
+      <h2>รายคน · ${k.name}</h2>
+      <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>ชื่อ-สกุล</th><th>มา</th><th>ขาด</th><th>สาย</th><th>ลา</th><th>%</th><th>แจ้งเตือน</th></tr></thead>
+        <tbody>
+          ${cs.list.map(({s,p})=>`
+            <tr>
+              <td>${s.no}</td><td>${s.name}</td>
+              <td>${p.present}</td><td>${p.absent}</td><td>${p.late}</td><td>${p.leave}</td>
+              <td><div class="bar"><i style="width:${p.rate}%"></i></div><small>${p.rate}%</small></td>
+              <td>${levelBadge(p.absent,'ขาด')}${levelBadge(p.late,'สาย')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+      <div class="note">การลาไม่นับเป็นขาด และไม่นับในการคำนวณ %</div>
+    </div>`;
+  },
+
+  alerts(){
+    const al=alerts();
+    return`
+    <div class="card">
+      <h2>🔔 การแจ้งเตือนนักเรียน</h2>
+      <div class="note" style="margin-top:0;margin-bottom:12px">แจ้งเตือนเมื่อขาดหรือสายถึง 3, 5 และ 10 ครั้ง การลาไม่นับรวม</div>
+      ${!al.length?'<div class="empty">🌼 ยังไม่มีนักเรียนที่ถึงเกณฑ์<br>แจ่มมากค่ะ</div>':al.map(({s,p,a,l})=>`
+        <div class="row">
+          <div class="who" style="flex:1;min-width:0">
+            <span class="no">${s.no}</span>
+            <div style="min-width:0">
+              <div class="who-name">${s.name}</div>
+              <div style="color:var(--muted);font-size:12px">${classOf(s.classId)} · เข้าเรียน ${p.rate}%</div>
+            </div>
+          </div>
+          <div style="flex-shrink:0;text-align:right">
+            ${a?`<span class="badge danger">🌧️ ขาด ${p.absent} (เกณฑ์${a})</span>`:''}
+            ${l?`<span class="badge warn">⏰ สาย ${p.late} (เกณฑ์${l})</span>`:''}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  },
+
+  manage(){
+    return`
+    <div class="card">
+      <h2>📚 เพิ่มวิชา</h2>
+      <div style="display:grid;gap:10px">
+        <div class="grid-2">
+          <label class="field">รหัสวิชา<input id="cCode" placeholder="เช่น ง30201"></label>
+          <label class="field">ภาคเรียน<select id="cTerm"><option value="1">ภาคเรียนที่ 1</option><option value="2" selected>ภาคเรียนที่ 2</option></select></label>
+        </div>
+        <label class="field">ชื่อวิชา<input id="cName" placeholder="เช่น คณิตศาสตร์พื้นฐาน"></label>
+        <label class="field">ปีการศึกษา<input id="cYear" type="number" value="2569"></label>
+        <label class="field">ครูผู้สอนร่วม (คั่นด้วยจุลภาค)<input id="cTeachers" placeholder="ครูสมชาย ใจดี, ครูสมหญิง"></label>
+      </div>
+      <div style="margin-top:14px"><button class="btn" onclick="addCourse()">📚 เพิ่มวิชา</button></div>
+    </div>
+
+    <div class="card">
+      <h2>🏫 เพิ่มห้องเรียน</h2>
+      <div style="display:grid;gap:10px">
+        <label class="field">วิชา<select id="rCourse">${db.courses.map(c=>`<option value="${c.id}" ${c.id===ui.courseId?'selected':''}>${c.code} ${c.name}</option>`).join('')}</select></label>
+        <label class="field">ชื่อห้อง<input id="rName" placeholder="เช่น ม.2/3"></label>
+      </div>
+      <div style="margin-top:14px"><button class="btn" onclick="addClass()">🏫 เพิ่มห้อง</button></div>
+    </div>
+
+    <div class="card">
+      <h2>🧑‍🎓 นำเข้ารายชื่อนักเรียน (.csv)</h2>
+      <label class="field" style="margin-bottom:12px">ห้อง
+        <select id="importClass">${db.classes.map(k=>`<option value="${k.id}">${classOf(k.id)}</option>`).join('')}</select>
+      </label>
+      <div style="margin-bottom:12px">
+        <button class="btn ghost sm" onclick="downloadTemplate()">⬇️ ดาวน์โหลดแบบฟอร์ม .csv</button>
+        <div class="note" style="margin-top:6px">ไฟล์มีคอลัมน์: เลขที่, รหัสนักเรียน, ชื่อ-นามสกุล</div>
+      </div>
+      <div class="upload-zone" id="uploadZone" onclick="$('#csvFile').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+        <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none" onchange="handleCsvFile(this.files[0])">
+        <div class="icon">📂</div>
+        <p style="font-weight:500;color:var(--ink)">แตะเพื่อเลือกไฟล์ .csv</p>
+        <p>หรือลากไฟล์มาวางที่นี่</p>
+      </div>
+      <div id="csvPreview"></div>
+      <div id="importBtn" style="margin-top:12px;display:none">
+        <button class="btn" onclick="importCsv()">🧑‍🎓 นำเข้ารายชื่อ</button>
+      </div>
+    </div>`;
+  },
+
+  export(){
+    const c=courseOf(ui.courseId);
+    const classes=courseClasses(ui.courseId);
+    return`
+    <div class="card">
+      <h2>📤 ส่งออกรายงาน</h2>
+      <div style="color:var(--muted);font-size:14px;margin-bottom:14px">${c?`${c.code} ${c.name} · ภาคเรียนที่ ${c.term} ปีการศึกษา ${c.year}`:''}</div>
+      <label class="field" style="margin-bottom:14px">รายงาน PDF สำหรับ
+        <select id="reportSel">
+          <option value="all">ทุกห้อง (แต่ละห้องขึ้นหน้าใหม่)</option>
+          ${classes.map(k=>`<option value="${k.id}">เฉพาะห้อง ${k.name}</option>`).join('')}
+        </select></label>
+      <div class="btn-row">
+        <button class="btn" onclick="exportXlsx()">📊 Excel</button>
+        <button class="btn ghost" onclick="exportPdf()">🖨️ PDF</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>💾 สำรองข้อมูลไป Google Sheets</h2>
+      <div style="color:var(--muted);font-size:14px;margin-bottom:14px;line-height:1.7">คัดลอกตารางข้อมูลทั้งวิชา แล้วไปวางใน Google Sheets ที่เซลล์ A1 (Ctrl+V หรือ ⌘+V)</div>
+      <div class="btn-row">
+        <button class="btn" onclick="copyForSheets()">📋 คัดลอกไป Sheets</button>
+        <button class="btn ghost" onclick="exportXlsx()">⬇️ ดาวน์โหลด .xlsx</button>
+      </div>
+    </div>`;
+  }
+};
+
+/* ===== CSV Template ===== */
+function downloadTemplate(){
+  const bom='\uFEFF';
+  const header='เลขที่,รหัสนักเรียน,ชื่อ-นามสกุล\n';
+  const rows=Array.from({length:5},(_,i)=>`${i+1},6100${String(i+1).padStart(2,'0')},ชื่อ นามสกุล`).join('\n');
+  const blob=new Blob([bom+header+rows],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='template_students.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('ดาวน์โหลดแบบฟอร์มแล้ว เปิดด้วย Excel หรือ Numbers ได้เลยค่ะ 📄');
+}
+
+/* ===== CSV parse & preview ===== */
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f)handleCsvFile(f);
+}
+function handleCsvFile(file){
+  if(!file)return;
+  if(!file.name.toLowerCase().endsWith('.csv'))return toast('กรุณาเลือกไฟล์ .csv นะคะ');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const text=e.target.result;
+    parseCsvPreview(text);
+  };
+  reader.readAsText(file,'UTF-8');
+}
+function parseCsvPreview(text){
+  /* กำจัด BOM และแยกบรรทัด */
+  const clean=text.replace(/^\uFEFF/,'').trim();
+  const lines=clean.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)return toast('ไฟล์ไม่มีข้อมูลนักเรียน กรุณาตรวจสอบอีกครั้งค่ะ');
+  /* ข้ามหัว */
+  const dataLines=lines.slice(1);
+  const parsed=dataLines.map(line=>{
+    const cols=line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+    return{no:cols[0]||'',studentId:cols[1]||'',name:cols[2]||''};
+  }).filter(r=>r.name);
+  if(!parsed.length)return toast('ไม่พบรายชื่อในไฟล์ กรุณาตรวจสอบรูปแบบค่ะ');
+  csvPreviewData=parsed;
+  /* แสดง preview */
+  const prev=$('#csvPreview');
+  const importBtn=$('#importBtn');
+  if(prev)prev.innerHTML=`
+    <div style="margin:10px 0 6px;font-size:14px;color:var(--muted)">พบ ${parsed.length} รายชื่อ · ตัวอย่างข้อมูล</div>
+    <div class="csv-preview">
+      <table>
+        <thead><tr><th>เลขที่</th><th>รหัส</th><th>ชื่อ-นามสกุล</th></tr></thead>
+        <tbody>${parsed.slice(0,5).map(r=>`<tr><td>${r.no}</td><td>${r.studentId}</td><td>${r.name}</td></tr>`).join('')}</tbody>
+      </table>
+      ${parsed.length>5?`<div style="padding:6px 8px;color:var(--muted);font-size:12px">และอีก ${parsed.length-5} รายชื่อ...</div>`:''}
+    </div>`;
+  if(importBtn)importBtn.style.display='block';
+}
+function importCsv(){
+  const classId=$('#importClass')?.value;
+  if(!classId)return toast('กรุณาเลือกห้องก่อนนะคะ');
+  if(!csvPreviewData||!csvPreviewData.length)return toast('ยังไม่มีข้อมูลให้นำเข้าค่ะ');
+  const data=csvPreviewData;
+  busy('กำลังนำเข้ารายชื่อ…',async()=>{
+    // ลบรายชื่อเดิม
+    await supabase.from('students').delete().eq('class_id',classId);
+    
+    // ใส่ใหม่
+    const records=data.map((r,idx)=>({
+      class_id:classId,
+      no:r.no||idx+1,
+      student_id:r.studentId,
+      name:r.name
+    }));
+    const{data:newStudents}=await supabase.from('students').insert(records).select();
+    if(newStudents){
+      db.students=db.students.filter(s=>s.classId!==classId);
+      db.students.push(...newStudents);
+      csvPreviewData=null;
+    }
+  },`นำเข้า ${data.length} รายชื่อเรียบร้อยแล้ว 🧑‍🎓`);
+}
+
+/* ===== save attendance ===== */
+function saveAttendance(){
+  const list=db.students.filter(s=>s.classId===ui.classId);
+  if(list.some(s=>!ui.marks[s.id]))return toast('ยังมีนักเรียนที่ยังไม่ได้เช็คชื่อค่ะ 🌱');
+  busy('กำลังบันทึกการเช็คชื่อ…',async()=>{
+    db.sessions[sKey(ui.classId,ui.date)]={...ui.marks};
+    
+    // บันทึกลง Supabase
+    const records=list
+      .filter(s=>ui.marks[s.id])
+      .map(s=>({
+        class_id:ui.classId,
+        student_id:s.id,
+        date:ui.date,
+        status:ui.marks[s.id]
+      }));
+    
+    if(records.length>0){
+      // ลบเก่า แล้วใส่ใหม่
+      await supabase
+        .from('attendance')
+        .delete()
+        .eq('class_id',ui.classId)
+        .eq('date',ui.date);
+      
+      await supabase
+        .from('attendance')
+        .insert(records);
+    }
+  },'บันทึกเรียบร้อยแล้ว 🌷');
+}
+function addCourse(){
+  const code=$('#cCode').value.trim(),name=$('#cName').value.trim();
+  if(!code||!name)return toast('กรอกรหัสและชื่อวิชาก่อนนะคะ 🌱');
+  const extra=$('#cTeachers').value.split(',').map(t=>t.trim()).filter(Boolean);
+  busy('กำลังบันทึกวิชา…',async()=>{
+    const c={code,name,term:+$('#cTerm').value,year:+$('#cYear').value,
+      teachers:[...new Set(['ครูอารดา รัตนนภาลัย',...extra])]};
+    
+    const{data}=await supabase.from('courses').insert([c]).select();
+    if(data){
+      db.courses.push(data[0]);
+      ui.courseId=data[0].id;
+    }
+  },'เพิ่มวิชาแล้ว 📚');
+}
+function addClass(){
+  const name=$('#rName').value.trim(),courseId=$('#rCourse').value;
+  if(!name)return toast('กรอกชื่อห้องก่อนนะคะ 🏫');
+  busy('กำลังบันทึกห้อง…',async()=>{
+    const k={course_id:courseId,name};
+    const{data}=await supabase.from('classes').insert([k]).select();
+    if(data){
+      db.classes.push(data[0]);
+      ui.courseId=courseId;
+      ui.classId=data[0].id;
+      loadMarks();
+    }
+  },'เพิ่มห้องเรียนแล้ว 🏫');
+}
+
+/* ===== export ===== */
+function buildRows(){
+  const c=courseOf(ui.courseId);
+  const rows=[['ห้อง','เลขที่','รหัสนักเรียน','ชื่อ-สกุล','มา','ขาด','สาย','ลา','% เข้าเรียน']];
+  courseClasses(c.id).forEach(k=>{
+    db.students.filter(s=>s.classId===k.id).forEach(s=>{
+      const p=personStats(s.id,k.id);
+      rows.push([k.name,s.no,s.studentId||'',s.name,p.present,p.absent,p.late,p.leave,p.rate/100]);
+    });
+  });
+  return rows;
+}
+function exportXlsx(){
+  const c=courseOf(ui.courseId);if(!c)return toast('ยังไม่มีวิชาให้ส่งออกค่ะ');
+  busy('กำลังสร้างไฟล์ Excel…',()=>{
+    const aoa=[['รายงานการเข้าเรียน'],['ชื่อวิชา',`${c.code} ${c.name}`],
+      [`ภาคเรียนที่ ${c.term} ปีการศึกษา ${c.year}`],['ครูผู้สอน',c.teachers.join(', ')],[],
+      ...buildRows()];
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'รายคน');
+    XLSX.writeFile(wb,`attendance_${c.code}_T${c.term}_${c.year}.xlsx`);
+  },'ดาวน์โหลด Excel แล้ว 📊');
+}
+function copyForSheets(){
+  const rows=buildRows();
+  const tsv=rows.map(r=>r.map(v=>String(v).replace(/\t|\n/g,' ')).join('\t')).join('\n');
+  const done=()=>toast('คัดลอกแล้ว วางใน Google Sheets ได้เลยค่ะ 📋');
+  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(tsv).then(done,()=>fallbackCopy(tsv,done));
+  else fallbackCopy(tsv,done);
+}
+function fallbackCopy(text,done){
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.cssText='position:fixed;opacity:0;top:0;left:0';
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand('copy');done()}catch(e){toast('คัดลอกไม่สำเร็จ ลองดาวน์โหลด .xlsx แทนนะคะ')}
+  ta.remove();
+}
+
+/* ===== PDF ===== */
+function classSection(c,k,newPage){
+  const rows=db.students.filter(s=>s.classId===k.id).map(s=>{
+    const p=personStats(s.id,k.id);
+    return`<tr><td>${s.no}</td><td>${s.studentId||''}</td><td>${s.name}</td><td>${p.present}</td><td>${p.absent}</td><td>${p.late}</td><td>${p.leave}</td><td>${p.rate}%</td></tr>`;
+  }).join('');
+  return`
+  <section class="cls ${newPage?'newpage':''}">
+    <div class="rh">
+      <h1>รายงานการเข้าเรียน</h1>
+      <p><b>ชื่อวิชา:</b> ${c.code} ${c.name}</p>
+      <p><b>ภาคเรียนที่</b> ${c.term} <b>ปีการศึกษา</b> ${c.year}</p>
+      <p><b>ครูผู้สอน:</b> ${c.teachers.join(', ')}</p>
+      <p><b>ห้อง:</b> ${k.name}</p>
+    </div>
+    <table>
+      <thead><tr><th>เลขที่</th><th>รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th>มา</th><th>ขาด</th><th>สาย</th><th>ลา</th><th>%</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="credit"><span>พัฒนาระบบโดย ครูอารดา รัตนนภาลัย</span></div>
+  </section>`;
+}
+function report(sel){
+  const c=courseOf(ui.courseId);if(!c)return'';
+  const classes=courseClasses(c.id);
+  const targets=sel==='all'?classes:classes.filter(k=>k.id===sel);
+  return`<div class="report">${targets.map((k,i)=>classSection(c,k,i>0)).join('')}</div>`;
+}
+function exportPdf(){
+  const sel=$('#reportSel')?.value||'all';
+  if(!courseClasses(ui.courseId).length)return toast('ยังไม่มีห้องให้พิมพ์รายงานค่ะ');
+  $('#printArea').innerHTML=report(sel);
+  setTimeout(()=>window.print(),100);
+}
+
+/* ===== PWA ===== */
+if('serviceWorker' in navigator){
+  const sw=`const C='att-v1';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(['/']))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;
+  const blob=new Blob([sw],{type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+
+initData();
+</script>
+</body>
+</html>
