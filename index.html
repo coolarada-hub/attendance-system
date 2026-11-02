@@ -112,6 +112,12 @@ select{
   gap:10px;padding:12px 0;border-bottom:1px solid var(--line);
 }
 .attend-row:last-child{border-bottom:none}
+/* ===== คะแนนพิเศษ ===== */
+.score-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.score-btn{border:none;border-radius:999px;min-width:48px;min-height:44px;padding:0 12px;font-size:18px;font-weight:600;cursor:pointer;touch-action:manipulation;background:#fdf3dc;color:#7a5200}
+.score-btn.minus{background:#f3f1ef;color:var(--muted)}
+.score-btn:active{transform:scale(.95)}
+.score-total{min-width:64px;text-align:center;font-size:20px;font-weight:700;color:#7a5200}
 .who{display:flex;align-items:center;gap:10px;font-weight:500;flex:1;min-width:0}
 .no{min-width:30px;height:30px;border-radius:50%;background:#f3f1ef;display:grid;place-items:center;font-size:13px;color:var(--muted);flex-shrink:0}
 .who-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
@@ -215,6 +221,7 @@ footer.site .frame{border:1.5px solid var(--pri-d);border-radius:14px;padding:8p
   <button data-v="checkin" onclick="go('checkin')"><span class="icon">✏️</span><span>เช็คชื่อ</span></button>
   <button data-v="stats" onclick="go('stats')"><span class="icon">📊</span><span>สถิติ</span></button>
   <button data-v="alerts" onclick="go('alerts')"><span class="icon">🔔</span><span>แจ้งเตือน</span></button>
+  <button data-v="score" onclick="go('score')"><span class="icon">⭐</span><span>คะแนน</span></button>
   <button data-v="manage" onclick="go('manage')"><span class="icon">🗂️</span><span>จัดการ</span></button>
   <button data-v="export" onclick="go('export')"><span class="icon">📤</span><span>ส่งออก</span></button>
 </nav>
@@ -236,7 +243,7 @@ const THRESHOLDS=[3,5,10];
 
 // ===== Supabase Setup =====
 const SUPABASE_URL='https://vrlcnajoiapgfpyslzbd.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxMDgxNzksImV4cCI6MTc0ODY4MDE3OX0.LK3X-zJxKmgUx8KI3iZpPKiBxU9Z8V7sXxW1l5JvZrU';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjY0MDksImV4cCI6MjEwODcwMjQwOX0.nNinHFVmlkjFwKHqvRsY-SxdnbPUukTj8PWlVdhBTXY';
 
 const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
@@ -244,8 +251,13 @@ const db={
   courses:[],
   classes:[],
   students:[],
-  sessions:{}
+  sessions:{},
+  scores:[]   // {id,studentId,classId,date,points} — points เป็น +1 หรือ -1
 };
+
+// แปลงแถวจากฐานข้อมูล (snake_case) เป็นรูปแบบที่แอปใช้ (camelCase)
+const toClass=r=>({id:r.id,courseId:r.course_id,name:r.name});
+const toStudent=r=>({id:r.id,classId:r.class_id,no:r.no,studentId:r.student_id,name:r.name});
 
 async function initData(){
   try{
@@ -255,11 +267,11 @@ async function initData(){
 
     // ดึงห้องทั้งหมด
     const{data:classesData}=await supabase.from('classes').select('*');
-    db.classes=classesData||[];
+    db.classes=(classesData||[]).map(toClass);
 
     // ดึงนักเรียนทั้งหมด
     const{data:studentsData}=await supabase.from('students').select('*');
-    db.students=studentsData||[];
+    db.students=(studentsData||[]).map(toStudent);
 
     // ดึงการเช็คชื่อทั้งหมด
     const{data:attendanceData}=await supabase.from('attendance').select('*');
@@ -271,6 +283,10 @@ async function initData(){
         db.sessions[key][rec.student_id]=rec.status;
       });
     }
+
+    // ดึงคะแนนพิเศษทั้งหมด
+    const{data:scoreData}=await supabase.from('bonus_points').select('*');
+    db.scores=(scoreData||[]).map(r=>({id:r.id,studentId:r.student_id,classId:r.class_id,date:r.date,points:r.points}));
 
     // เริ่มหน้า
     go('home');
@@ -403,6 +419,39 @@ function allPresent(){
   toast('ตั้งค่าทั้งห้องเป็นมาเรียนแล้ว 🌷 กดบันทึกเพื่อยืนยัน');
 }
 
+/* ===== คะแนนพิเศษ ===== */
+const scoreTotal=sid=>db.scores.filter(r=>r.studentId===sid).reduce((a,r)=>a+r.points,0);
+const scoreToday=sid=>db.scores.filter(r=>r.studentId===sid&&r.date===ui.date).reduce((a,r)=>a+r.points,0);
+
+function refreshScoreCell(sid){
+  const el=document.querySelector(`[data-total="${sid}"]`);
+  if(el)el.textContent=scoreTotal(sid);
+}
+
+function addScore(sid,delta){
+  const s=db.students.find(x=>x.id===sid);
+  if(!s)return;
+  const rec={id:uid(),studentId:sid,classId:s.classId,date:ui.date,points:delta};
+  db.scores.push(rec);            // อัปเดตทันที ไม่รอเน็ต
+  refreshScoreCell(sid);
+  const el=document.querySelector(`[data-today="${sid}"]`);
+  if(el)el.textContent=scoreToday(sid);
+
+  supabase.from('bonus_points')
+    .insert([{student_id:sid,class_id:s.classId,date:ui.date,points:delta}])
+    .select()
+    .then(({data,error})=>{
+      if(error||!data){
+        // บันทึกไม่สำเร็จ → ย้อนค่ากลับ
+        db.scores=db.scores.filter(r=>r!==rec);
+        refreshScoreCell(sid);
+        toast('บันทึกคะแนนไม่สำเร็จ ลองอีกครั้งนะคะ ⚠️');
+      }else{
+        rec.id=data[0].id;        // ใช้ id จริงจากฐานข้อมูล
+      }
+    });
+}
+
 /* ===== VIEWS ===== */
 const VIEWS={
   home(){
@@ -490,6 +539,40 @@ const VIEWS={
     </div>`;
   },
 
+  score(){
+    const cls=courseClasses(ui.courseId);
+    if(!cls.length)return`<div class="card empty">ยังไม่มีห้องในวิชานี้ 🌱<br>ไปเพิ่มที่หน้าจัดการได้เลยค่ะ</div>`;
+    const k=cls.find(x=>x.id===ui.scoreClass)||cls[0];
+    ui.scoreClass=k.id;
+    const list=db.students.filter(s=>s.classId===k.id);
+    if(!list.length)return`<div class="card empty">ห้องนี้ยังไม่มีรายชื่อนักเรียน 🌱<br>ไปนำเข้าที่หน้าจัดการได้เลยค่ะ</div>`;
+    return`
+    <div class="card" style="padding:12px 14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${cls.map(c=>`<button class="pill ${c.id===k.id?'on ok':''}" onclick="ui.scoreClass='${c.id}';go('score')">${c.name}</button>`).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <h2>⭐ คะแนนพิเศษ · ${k.name}</h2>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:6px">กด +1 เมื่อนักเรียนตอบคำถาม หรือทำกิจกรรมดี</div>
+      ${list.map(s=>`
+        <div class="attend-row">
+          <div class="who">
+            <span class="no">${s.no}</span>
+            <div>
+              <div class="who-name" style="font-size:15px">${s.name}</div>
+              <div style="font-size:12px;color:var(--muted);font-weight:400">วันนี้ +<span data-today="${s.id}">${scoreToday(s.id)}</span></div>
+            </div>
+          </div>
+          <div class="score-ctrl">
+            <button class="score-btn minus" onclick="addScore('${s.id}',-1)" aria-label="ลบ 1 คะแนน">−1</button>
+            <div class="score-total" data-total="${s.id}">${scoreTotal(s.id)}</div>
+            <button class="score-btn" onclick="addScore('${s.id}',1)" aria-label="เพิ่ม 1 คะแนน">+1 ⭐</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  },
+
   stats(){
     const cls=courseClasses(ui.courseId);
     const k=cls.find(x=>x.id===ui.statsClass);
@@ -513,7 +596,7 @@ const VIEWS={
       <h2>รายคน · ${k.name}</h2>
       <div class="tbl-wrap">
       <table>
-        <thead><tr><th>#</th><th>ชื่อ-สกุล</th><th>มา</th><th>ขาด</th><th>สาย</th><th>ลา</th><th>%</th><th>แจ้งเตือน</th></tr></thead>
+        <thead><tr><th>#</th><th>ชื่อ-สกุล</th><th>มา</th><th>ขาด</th><th>สาย</th><th>ลา</th><th>%</th><th>แจ้งเตือน</th><th>⭐ คะแนน</th></tr></thead>
         <tbody>
           ${cs.list.map(({s,p})=>`
             <tr>
@@ -521,6 +604,7 @@ const VIEWS={
               <td>${p.present}</td><td>${p.absent}</td><td>${p.late}</td><td>${p.leave}</td>
               <td><div class="bar"><i style="width:${p.rate}%"></i></div><small>${p.rate}%</small></td>
               <td>${levelBadge(p.absent,'ขาด')}${levelBadge(p.late,'สาย')}</td>
+              <td><b>${scoreTotal(s.id)}</b></td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -576,6 +660,8 @@ const VIEWS={
       </div>
       <div style="margin-top:14px"><button class="btn" onclick="addClass()">🏫 เพิ่มห้อง</button></div>
     </div>
+
+    ${studentsCard()}
 
     <div class="card">
       <h2>🧑‍🎓 นำเข้ารายชื่อนักเรียน (.csv)</h2>
@@ -704,10 +790,93 @@ function importCsv(){
     const{data:newStudents}=await supabase.from('students').insert(records).select();
     if(newStudents){
       db.students=db.students.filter(s=>s.classId!==classId);
-      db.students.push(...newStudents);
+      db.students.push(...newStudents.map(toStudent));
       csvPreviewData=null;
     }
   },`นำเข้า ${data.length} รายชื่อเรียบร้อยแล้ว 🧑‍🎓`);
+}
+
+/* ===== จัดการรายชื่อนักเรียน (เพิ่ม / แก้ไขทีละคน) ===== */
+function studentsCard(){
+  if(!db.classes.length)return'';
+  const k=db.classes.find(x=>x.id===ui.manageClass)||db.classes[0];
+  ui.manageClass=k.id;
+  const list=db.students.filter(s=>s.classId===k.id).sort((a,b)=>a.no-b.no);
+  const edit=ui.editStudentId?db.students.find(s=>s.id===ui.editStudentId):null;
+  const parts=edit?edit.name.split(/\s+/):[];
+  const nextNo=list.reduce((m,s)=>Math.max(m,+s.no||0),0)+1;
+  return`
+  <div class="card">
+    <h2>👥 จัดการรายชื่อนักเรียน</h2>
+    <label class="field" style="margin-bottom:12px">ห้อง
+      <select onchange="ui.manageClass=this.value;ui.editStudentId=null;render()">
+        ${db.classes.map(c=>`<option value="${c.id}" ${c.id===k.id?'selected':''}>${classOf(c.id)}</option>`).join('')}
+      </select>
+    </label>
+    <div style="display:grid;gap:10px;padding-bottom:14px;margin-bottom:6px;border-bottom:1px solid var(--line)">
+      <div style="font-weight:600">${edit?'✏️ แก้ไขนักเรียน':'➕ เพิ่มนักเรียนใหม่'}</div>
+      <div class="grid-2">
+        <label class="field">เลขที่<input id="sNo" type="number" min="1" value="${edit?edit.no:nextNo}"></label>
+        <label class="field">รหัสนักเรียน<input id="sCode" value="${edit?(edit.studentId||''):''}"></label>
+      </div>
+      <div class="grid-2">
+        <label class="field">ชื่อ<input id="sFirst" value="${parts[0]||''}"></label>
+        <label class="field">นามสกุล<input id="sLast" value="${parts.slice(1).join(' ')}"></label>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="saveStudent()">${edit?'💾 บันทึกการแก้ไข':'➕ เพิ่มนักเรียน'}</button>
+        ${edit?'<button class="btn ghost" onclick="cancelEditStudent()">ยกเลิก</button>':''}
+      </div>
+    </div>
+    ${list.length?list.map(s=>`
+      <div class="attend-row">
+        <div class="who">
+          <span class="no">${s.no}</span>
+          <div>
+            <div class="who-name" style="font-size:15px">${s.name}</div>
+            <div style="font-size:12px;color:var(--muted);font-weight:400">${s.studentId||'-'}</div>
+          </div>
+        </div>
+        <button class="btn ghost sm" onclick="ui.editStudentId='${s.id}';render()">✏️ แก้ไข</button>
+      </div>`).join(''):'<div class="note">ห้องนี้ยังไม่มีรายชื่อนักเรียน</div>'}
+  </div>`;
+}
+
+function cancelEditStudent(){ui.editStudentId=null;render()}
+
+async function saveStudent(){
+  const no=+$('#sNo').value,code=$('#sCode').value.trim();
+  const first=$('#sFirst').value.trim(),last=$('#sLast').value.trim();
+  const classId=ui.manageClass;
+  if(!no||no<1)return toast('กรอกเลขที่ให้ถูกต้องก่อนนะคะ 🔢');
+  if(!first)return toast('กรอกชื่อก่อนนะคะ ✏️');
+  const name=[first,last].filter(Boolean).join(' ');
+  const dup=db.students.find(s=>s.classId===classId&&+s.no===no&&s.id!==ui.editStudentId);
+  if(dup)return toast(`เลขที่ ${no} ซ้ำกับ ${dup.name} ค่ะ`);
+
+  $('#busyMsg').textContent='กำลังบันทึกรายชื่อ…';$('#overlay').classList.add('show');
+  try{
+    if(ui.editStudentId){
+      const{error}=await supabase.from('students')
+        .update({no,student_id:code,name}).eq('id',ui.editStudentId);
+      if(error)throw error;
+      Object.assign(db.students.find(s=>s.id===ui.editStudentId),{no,studentId:code,name});
+      toast('แก้ไขข้อมูลนักเรียนแล้ว ✏️');
+    }else{
+      const{data,error}=await supabase.from('students')
+        .insert([{class_id:classId,no,student_id:code,name}]).select();
+      if(error)throw error;
+      db.students.push(toStudent(data[0]));
+      toast('เพิ่มนักเรียนแล้ว 🧑‍🎓');
+    }
+    ui.editStudentId=null;
+  }catch(e){
+    console.error(e);
+    toast('บันทึกไม่สำเร็จ ลองอีกครั้งนะคะ ⚠️');
+  }finally{
+    $('#overlay').classList.remove('show');
+    render();
+  }
 }
 
 /* ===== save attendance ===== */
@@ -763,7 +932,7 @@ function addClass(){
     const k={course_id:courseId,name};
     const{data}=await supabase.from('classes').insert([k]).select();
     if(data){
-      db.classes.push(data[0]);
+      db.classes.push(toClass(data[0]));
       ui.courseId=courseId;
       ui.classId=data[0].id;
       loadMarks();
