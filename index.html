@@ -243,7 +243,7 @@ const THRESHOLDS=[3,5,10];
 
 // ===== Supabase Setup =====
 const SUPABASE_URL='https://vrlcnajoiapgfpyslzbd.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjY0MDksImV4cCI6MjEwODcwMjQwOX0.nNinHFVmlkjFwKHqvRsY-SxdnbPUukTj8PWlVdhBTXY';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxMDgxNzksImV4cCI6MTc0ODY4MDE3OX0.LK3X-zJxKmgUx8KI3iZpPKiBxU9Z8V7sXxW1l5JvZrU';
 
 const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
@@ -638,19 +638,7 @@ const VIEWS={
 
   manage(){
     return`
-    <div class="card">
-      <h2>📚 เพิ่มวิชา</h2>
-      <div style="display:grid;gap:10px">
-        <div class="grid-2">
-          <label class="field">รหัสวิชา<input id="cCode" placeholder="เช่น ง30201"></label>
-          <label class="field">ภาคเรียน<select id="cTerm"><option value="1">ภาคเรียนที่ 1</option><option value="2" selected>ภาคเรียนที่ 2</option></select></label>
-        </div>
-        <label class="field">ชื่อวิชา<input id="cName" placeholder="เช่น คณิตศาสตร์พื้นฐาน"></label>
-        <label class="field">ปีการศึกษา<input id="cYear" type="number" value="2569"></label>
-        <label class="field">ครูผู้สอนร่วม (คั่นด้วยจุลภาค)<input id="cTeachers" placeholder="ครูสมชาย ใจดี, ครูสมหญิง"></label>
-      </div>
-      <div style="margin-top:14px"><button class="btn" onclick="addCourse()">📚 เพิ่มวิชา</button></div>
-    </div>
+    ${coursesCard()}
 
     <div class="card">
       <h2>🏫 เพิ่มห้องเรียน</h2>
@@ -796,6 +784,105 @@ function importCsv(){
   },`นำเข้า ${data.length} รายชื่อเรียบร้อยแล้ว 🧑‍🎓`);
 }
 
+/* ===== ลบข้อมูล ===== */
+async function removeRow(table,id,msg){
+  if(!confirm(msg))return false;
+  $('#busyMsg').textContent='กำลังลบ…';$('#overlay').classList.add('show');
+  try{
+    const{error}=await supabase.from(table).delete().eq('id',id);
+    if(error)throw error;
+    return true;
+  }catch(e){
+    console.error(e);
+    toast('ลบไม่สำเร็จ ลองอีกครั้งนะคะ ⚠️');
+    return false;
+  }finally{
+    $('#overlay').classList.remove('show');
+  }
+}
+
+async function deleteStudent(sid){
+  const s=db.students.find(x=>x.id===sid);
+  if(!s)return;
+  if(!await removeRow('students',sid,`ลบ "${s.name}" ?\nประวัติการเช็คชื่อและคะแนนของคนนี้จะถูกลบด้วย\nการลบนี้ย้อนกลับไม่ได้`))return;
+  db.students=db.students.filter(x=>x.id!==sid);
+  Object.values(db.sessions).forEach(r=>delete r[sid]);
+  db.scores=db.scores.filter(r=>r.studentId!==sid);
+  ui.editStudentId=null;
+  toast('ลบนักเรียนแล้ว 🗑️');
+  render();
+}
+
+async function deleteClass(cid){
+  const k=db.classes.find(x=>x.id===cid);
+  if(!k)return;
+  const n=db.students.filter(x=>x.classId===cid).length;
+  if(!await removeRow('classes',cid,`ลบห้อง "${k.name}" ?\nนักเรียน ${n} คน การเช็คชื่อ และคะแนนของห้องนี้จะถูกลบทั้งหมด\nการลบนี้ย้อนกลับไม่ได้`))return;
+  db.classes=db.classes.filter(x=>x.id!==cid);
+  db.students=db.students.filter(x=>x.classId!==cid);
+  Object.keys(db.sessions).forEach(key=>{if(key.startsWith(cid+'|'))delete db.sessions[key]});
+  db.scores=db.scores.filter(r=>r.classId!==cid);
+  ui.classId=null;
+  ui.manageClass=null;
+  ui.editStudentId=null;
+  toast('ลบห้องแล้ว 🗑️');
+  render();
+}
+
+async function deleteCourse(id){
+  const c=db.courses.find(x=>x.id===id);
+  if(!c)return;
+  const classIds=db.classes.filter(k=>k.courseId===id).map(k=>k.id);
+  if(!await removeRow('courses',id,`ลบวิชา "${c.name}" ?\nห้องเรียน ${classIds.length} ห้อง รายชื่อ การเช็คชื่อ และคะแนนที่เกี่ยวข้องจะถูกลบทั้งหมด\nการลบนี้ย้อนกลับไม่ได้`))return;
+  db.courses=db.courses.filter(x=>x.id!==id);
+  db.classes=db.classes.filter(k=>k.courseId!==id);
+  db.students=db.students.filter(x=>!classIds.includes(x.classId));
+  Object.keys(db.sessions).forEach(key=>{if(classIds.some(cid=>key.startsWith(cid+'|')))delete db.sessions[key]});
+  db.scores=db.scores.filter(r=>!classIds.includes(r.classId));
+  ui.courseId=null;
+  ui.editCourseId=null;
+  ui.classId=null;
+  ui.manageClass=null;
+  ui.editStudentId=null;
+  toast('ลบวิชาแล้ว 🗑️');
+  render();
+}
+
+/* ===== จัดการวิชา (เพิ่ม / แก้ไข) ===== */
+function coursesCard(){
+  const e=ui.editCourseId?db.courses.find(c=>c.id===ui.editCourseId):null;
+  const extra=e?(e.teachers||[]).filter(t=>t!=='ครูอารดา รัตนนภาลัย').join(', '):'';
+  return`
+  <div class="card">
+    <h2>📚 ${e?'แก้ไขวิชา':'เพิ่มวิชา'}</h2>
+    <div style="display:grid;gap:10px">
+      <div class="grid-2">
+        <label class="field">รหัสวิชา<input id="cCode" placeholder="เช่น ง30201" value="${e?.code||''}"></label>
+        <label class="field">ภาคเรียน<select id="cTerm"><option value="1" ${e?.term==1?'selected':''}>ภาคเรียนที่ 1</option><option value="2" ${(!e||e.term==2)?'selected':''}>ภาคเรียนที่ 2</option></select></label>
+      </div>
+      <label class="field">ชื่อวิชา<input id="cName" placeholder="เช่น คณิตศาสตร์พื้นฐาน" value="${e?.name||''}"></label>
+      <label class="field">ปีการศึกษา<input id="cYear" type="number" value="${e?.year||2569}"></label>
+      <label class="field">ครูผู้สอนร่วม (คั่นด้วยจุลภาค)<input id="cTeachers" placeholder="ครูสมชาย ใจดี, ครูสมหญิง" value="${extra}"></label>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn" onclick="addCourse()">${e?'💾 บันทึกการแก้ไข':'📚 เพิ่มวิชา'}</button>
+      ${e?'<button class="btn ghost" onclick="cancelEditCourse()">ยกเลิก</button>':''}
+    </div>
+    ${e?`<div style="margin-top:12px"><button class="btn ghost" style="color:#b3261e" onclick="deleteCourse('${e.id}')">🗑️ ลบวิชานี้ทั้งวิชา</button></div>`:''}
+    ${db.courses.length?`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:6px">
+      ${db.courses.map(c=>`
+        <div class="attend-row">
+          <div class="who"><div>
+            <div class="who-name" style="font-size:15px;max-width:none">${c.code} ${c.name}</div>
+            <div style="font-size:12px;color:var(--muted);font-weight:400">ภาคเรียนที่ ${c.term} · ปี ${c.year}</div>
+          </div></div>
+          <button class="btn ghost sm" onclick="ui.editCourseId='${c.id}';render()">✏️ แก้ไข</button>
+        </div>`).join('')}
+    </div>`:''}
+  </div>`;
+}
+function cancelEditCourse(){ui.editCourseId=null;render()}
+
 /* ===== จัดการรายชื่อนักเรียน (เพิ่ม / แก้ไขทีละคน) ===== */
 function studentsCard(){
   if(!db.classes.length)return'';
@@ -837,8 +924,14 @@ function studentsCard(){
             <div style="font-size:12px;color:var(--muted);font-weight:400">${s.studentId||'-'}</div>
           </div>
         </div>
-        <button class="btn ghost sm" onclick="ui.editStudentId='${s.id}';render()">✏️ แก้ไข</button>
+        <div class="btn-row">
+          <button class="btn ghost sm" onclick="ui.editStudentId='${s.id}';render()">✏️ แก้ไข</button>
+          <button class="btn ghost sm" style="color:#b3261e" onclick="deleteStudent('${s.id}')">🗑️</button>
+        </div>
       </div>`).join(''):'<div class="note">ห้องนี้ยังไม่มีรายชื่อนักเรียน</div>'}
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+      <button class="btn ghost" style="color:#b3261e" onclick="deleteClass('${k.id}')">🗑️ ลบห้องนี้ทั้งห้อง</button>
+    </div>
   </div>`;
 }
 
@@ -910,20 +1003,35 @@ function saveAttendance(){
     }
   },'บันทึกเรียบร้อยแล้ว 🌷');
 }
-function addCourse(){
+async function addCourse(){
   const code=$('#cCode').value.trim(),name=$('#cName').value.trim();
   if(!code||!name)return toast('กรอกรหัสและชื่อวิชาก่อนนะคะ 🌱');
   const extra=$('#cTeachers').value.split(',').map(t=>t.trim()).filter(Boolean);
-  busy('กำลังบันทึกวิชา…',async()=>{
-    const c={code,name,term:+$('#cTerm').value,year:+$('#cYear').value,
-      teachers:[...new Set(['ครูอารดา รัตนนภาลัย',...extra])]};
-    
-    const{data}=await supabase.from('courses').insert([c]).select();
-    if(data){
+  const vals={code,name,term:+$('#cTerm').value,year:+$('#cYear').value,
+    teachers:[...new Set(['ครูอารดา รัตนนภาลัย',...extra])]};
+  $('#busyMsg').textContent=ui.editCourseId?'กำลังแก้ไขวิชา…':'กำลังบันทึกวิชา…';
+  $('#overlay').classList.add('show');
+  try{
+    if(ui.editCourseId){
+      const{error}=await supabase.from('courses').update(vals).eq('id',ui.editCourseId);
+      if(error)throw error;
+      Object.assign(db.courses.find(c=>c.id===ui.editCourseId),vals);
+      ui.editCourseId=null;
+      toast('แก้ไขวิชาแล้ว ✏️');
+    }else{
+      const{data,error}=await supabase.from('courses').insert([vals]).select();
+      if(error)throw error;
       db.courses.push(data[0]);
       ui.courseId=data[0].id;
+      toast('เพิ่มวิชาแล้ว 📚');
     }
-  },'เพิ่มวิชาแล้ว 📚');
+  }catch(e){
+    console.error(e);
+    toast('บันทึกวิชาไม่สำเร็จ ลองอีกครั้งนะคะ ⚠️');
+  }finally{
+    $('#overlay').classList.remove('show');
+    render();
+  }
 }
 function addClass(){
   const name=$('#rName').value.trim(),courseId=$('#rCourse').value;
