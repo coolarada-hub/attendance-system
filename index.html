@@ -243,7 +243,7 @@ const THRESHOLDS=[3,5,10];
 
 // ===== Supabase Setup =====
 const SUPABASE_URL='https://vrlcnajoiapgfpyslzbd.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjY0MDksImV4cCI6MjEwODcwMjQwOX0.nNinHFVmlkjFwKHqvRsY-SxdnbPUukTj8PWlVdhBTXY';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxMDgxNzksImV4cCI6MTc0ODY4MDE3OX0.LK3X-zJxKmgUx8KI3iZpPKiBxU9Z8V7sXxW1l5JvZrU';
 
 const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
@@ -453,6 +453,26 @@ function addScore(sid,delta){
 }
 
 /* ===== VIEWS ===== */
+function selectorsHtml(){
+  return`
+    <div class="card">
+      <div style="display:grid;gap:10px">
+        <label class="field">วิชา
+          <select onchange="ui.courseId=this.value;go('checkin')">
+            ${db.courses.map(c=>`<option value="${c.id}" ${c.id===ui.courseId?'selected':''}>${c.code} ${c.name}</option>`).join('')}
+          </select></label>
+        <div class="grid-2">
+          <label class="field">ห้อง
+            <select onchange="ui.classId=this.value;loadMarks();go('checkin')">
+              ${cls.map(k=>`<option value="${k.id}" ${k.id===ui.classId?'selected':''}>${k.name}</option>`).join('')}
+            </select></label>
+          <label class="field">วันที่
+            <input type="date" value="${ui.date}" onchange="ui.date=this.value;loadMarks();go('checkin')"></label>
+        </div>
+      </div>
+    </div>`;
+}
+
 const VIEWS={
   home(){
     const al=alerts();
@@ -480,36 +500,23 @@ const VIEWS={
             <div style="color:var(--muted);font-size:13px;margin-top:2px">ภาคเรียนที่ ${c.term} ปีการศึกษา ${c.year}</div>
             <div style="color:var(--muted);font-size:13px">ครูผู้สอน ${c.teachers.join(', ')}</div>
           </div>
-          <button class="btn ghost" style="flex-shrink:0" onclick="ui.courseId='${c.id}';go('checkin')">เช็คชื่อ</button>
+          <button class="btn ghost" style="flex-shrink:0" onclick="ui.courseId='${c.id}';ui.classId=courseClasses('${c.id}')[0]?.id;loadMarks();go('checkin')">เช็คชื่อ</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 12px">
+          ${courseClasses(c.id).map(k=>`<button class="pill" onclick="ui.courseId='${c.id}';ui.classId='${k.id}';loadMarks();go('checkin')">${k.name}</button>`).join('')||'<span style="color:var(--muted);font-size:13px">ยังไม่มีห้อง</span>'}
         </div>`).join('')}
     </div>`;
   },
 
   checkin(){
     const cls=courseClasses(ui.courseId);
-    if(!cls.length)return`<div class="card empty">ยังไม่มีห้องในวิชานี้ 🌱<br>ไปเพิ่มที่หน้าจัดการได้เลยค่ะ</div>`;
+    if(!cls.length)return selectorsHtml()+`<div class="card empty">ยังไม่มีห้องในวิชานี้ 🌱<br>ไปเพิ่มที่หน้าจัดการได้เลยค่ะ</div>`;
     const list=db.students.filter(s=>s.classId===ui.classId);
-    if(!list.length)return`<div class="card empty">ห้องนี้ยังไม่มีรายชื่อนักเรียน 🌱<br>ไปนำเข้าที่หน้าจัดการได้เลยค่ะ</div>`;
+    if(!list.length)return selectorsHtml()+`<div class="card empty">ห้องนี้ยังไม่มีรายชื่อนักเรียน 🌱<br>ไปนำเข้าที่หน้าจัดการได้เลยค่ะ</div>`;
     const cnt={present:0,absent:0,late:0,leave:0};
     list.forEach(s=>{if(ui.marks[s.id])cnt[ui.marks[s.id]]++});
     const saved=!!db.sessions[sKey(ui.classId,ui.date)];
-    return`
-    <div class="card">
-      <div style="display:grid;gap:10px">
-        <label class="field">วิชา
-          <select onchange="ui.courseId=this.value;go('checkin')">
-            ${db.courses.map(c=>`<option value="${c.id}" ${c.id===ui.courseId?'selected':''}>${c.code} ${c.name}</option>`).join('')}
-          </select></label>
-        <div class="grid-2">
-          <label class="field">ห้อง
-            <select onchange="ui.classId=this.value;loadMarks();go('checkin')">
-              ${cls.map(k=>`<option value="${k.id}" ${k.id===ui.classId?'selected':''}>${k.name}</option>`).join('')}
-            </select></label>
-          <label class="field">วันที่
-            <input type="date" value="${ui.date}" onchange="ui.date=this.value;loadMarks();go('checkin')"></label>
-        </div>
-      </div>
-    </div>
+    return selectorsHtml()+`
     <div id="countBar" class="sum-bar">${countBarHtml(cnt)}</div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
