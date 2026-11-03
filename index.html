@@ -307,6 +307,7 @@ const loadMarks=()=>{ui.marks={...(db.sessions[sKey(ui.classId,ui.date)]||{})}};
 loadMarks();
 
 const courseOf=id=>db.courses.find(c=>c.id===id);
+const studentsOf=cid=>db.students.filter(s=>s.classId===cid).sort((a,b)=>(+a.no||0)-(+b.no||0));
 const courseClasses=id=>db.classes.filter(k=>k.courseId===id).sort((a,b)=>a.name.localeCompare(b.name,'th',{numeric:true}));
 const classOf=id=>{const k=db.classes.find(x=>x.id===id);const c=courseOf(k?.courseId);return`${c?.code||''} ${k?.name||''}`.trim()};
 
@@ -318,7 +319,7 @@ function personStats(sid,cid){
   return c;
 }
 function classStats(cid){
-  const list=db.students.filter(s=>s.classId===cid).map(s=>({s,p:personStats(s.id,cid)}));
+  const list=studentsOf(cid).map(s=>({s,p:personStats(s.id,cid)}));
   const avg=list.length?Math.round(list.reduce((a,b)=>a+b.p.rate,0)/list.length):0;
   const sessions=Object.keys(db.sessions).filter(k=>k.startsWith(cid+'|')).length;
   return{list,avg,sessions};
@@ -374,7 +375,7 @@ setInterval(()=>{
 
 /* ===== updateCountBar: อัปเดตตัวเลขโดยไม่ render ทั้งหน้า ===== */
 function updateCountBar(){
-  const list=db.students.filter(s=>s.classId===ui.classId);
+  const list=studentsOf(ui.classId);
   const cnt={present:0,absent:0,late:0,leave:0};
   list.forEach(s=>{if(ui.marks[s.id])cnt[ui.marks[s.id]]++});
   const bar=$('#countBar');
@@ -405,7 +406,7 @@ function mark(sid,status){
 
 /* ===== allPresent: ไม่ render ทั้งหน้า ===== */
 function allPresent(){
-  db.students.filter(s=>s.classId===ui.classId).forEach(s=>{
+  studentsOf(ui.classId).forEach(s=>{
     ui.marks[s.id]='present';
     const row=document.querySelector(`.attend-row[data-sid="${s.id}"]`);
     if(row){
@@ -512,7 +513,7 @@ const VIEWS={
   checkin(){
     const cls=courseClasses(ui.courseId);
     if(!cls.length)return selectorsHtml()+`<div class="card empty">ยังไม่มีห้องในวิชานี้ 🌱<br>ไปเพิ่มที่หน้าจัดการได้เลยค่ะ</div>`;
-    const list=db.students.filter(s=>s.classId===ui.classId);
+    const list=studentsOf(ui.classId);
     if(!list.length)return selectorsHtml()+`<div class="card empty">ห้องนี้ยังไม่มีรายชื่อนักเรียน 🌱<br>ไปนำเข้าที่หน้าจัดการได้เลยค่ะ</div>`;
     const cnt={present:0,absent:0,late:0,leave:0};
     list.forEach(s=>{if(ui.marks[s.id])cnt[ui.marks[s.id]]++});
@@ -552,7 +553,7 @@ const VIEWS={
     if(!cls.length)return`<div class="card empty">ยังไม่มีห้องในวิชานี้ 🌱<br>ไปเพิ่มที่หน้าจัดการได้เลยค่ะ</div>`;
     const k=cls.find(x=>x.id===ui.scoreClass)||cls[0];
     ui.scoreClass=k.id;
-    const list=db.students.filter(s=>s.classId===k.id);
+    const list=studentsOf(k.id);
     if(!list.length)return`<div class="card empty">ห้องนี้ยังไม่มีรายชื่อนักเรียน 🌱<br>ไปนำเข้าที่หน้าจัดการได้เลยค่ะ</div>`;
     return`
     <div class="card" style="padding:12px 14px">
@@ -896,7 +897,7 @@ function studentsCard(){
   if(!db.classes.length)return'';
   const k=db.classes.find(x=>x.id===ui.manageClass)||db.classes[0];
   ui.manageClass=k.id;
-  const list=db.students.filter(s=>s.classId===k.id).sort((a,b)=>a.no-b.no);
+  const list=studentsOf(k.id).sort((a,b)=>a.no-b.no);
   const edit=ui.editStudentId?db.students.find(s=>s.id===ui.editStudentId):null;
   const parts=edit?edit.name.split(/\s+/):[];
   const nextNo=list.reduce((m,s)=>Math.max(m,+s.no||0),0)+1;
@@ -982,7 +983,7 @@ async function saveStudent(){
 
 /* ===== save attendance ===== */
 function saveAttendance(){
-  const list=db.students.filter(s=>s.classId===ui.classId);
+  const list=studentsOf(ui.classId);
   if(list.some(s=>!ui.marks[s.id]))return toast('ยังมีนักเรียนที่ยังไม่ได้เช็คชื่อค่ะ 🌱');
   busy('กำลังบันทึกการเช็คชื่อ…',async()=>{
     db.sessions[sKey(ui.classId,ui.date)]={...ui.marks};
@@ -1061,7 +1062,7 @@ function buildRows(){
   const c=courseOf(ui.courseId);
   const rows=[['ห้อง','เลขที่','รหัสนักเรียน','ชื่อ-สกุล','มา','ขาด','สาย','ลา','% เข้าเรียน']];
   courseClasses(c.id).forEach(k=>{
-    db.students.filter(s=>s.classId===k.id).forEach(s=>{
+    studentsOf(k.id).forEach(s=>{
       const p=personStats(s.id,k.id);
       rows.push([k.name,s.no,s.studentId||'',s.name,p.present,p.absent,p.late,p.leave,p.rate/100]);
     });
@@ -1096,7 +1097,7 @@ function fallbackCopy(text,done){
 
 /* ===== PDF ===== */
 function classSection(c,k,newPage){
-  const rows=db.students.filter(s=>s.classId===k.id).map(s=>{
+  const rows=studentsOf(k.id).map(s=>{
     const p=personStats(s.id,k.id);
     return`<tr><td>${s.no}</td><td>${s.studentId||''}</td><td>${s.name}</td><td>${p.present}</td><td>${p.absent}</td><td>${p.late}</td><td>${p.leave}</td><td>${p.rate}%</td></tr>`;
   }).join('');
