@@ -243,7 +243,7 @@ const THRESHOLDS=[3,5,10];
 
 // ===== Supabase Setup =====
 const SUPABASE_URL='https://vrlcnajoiapgfpyslzbd.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjY0MDksImV4cCI6MjEwODcwMjQwOX0.nNinHFVmlkjFwKHqvRsY-SxdnbPUukTj8PWlVdhBTXY';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZybGNuYWpvaWFwZ2ZweXNsemJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxMDgxNzksImV4cCI6MTc0ODY4MDE3OX0.LK3X-zJxKmgUx8KI3iZpPKiBxU9Z8V7sXxW1l5JvZrU';
 
 const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
@@ -307,7 +307,7 @@ const loadMarks=()=>{ui.marks={...(db.sessions[sKey(ui.classId,ui.date)]||{})}};
 loadMarks();
 
 const courseOf=id=>db.courses.find(c=>c.id===id);
-const courseClasses=id=>db.classes.filter(k=>k.courseId===id);
+const courseClasses=id=>db.classes.filter(k=>k.courseId===id).sort((a,b)=>a.name.localeCompare(b.name,'th',{numeric:true}));
 const classOf=id=>{const k=db.classes.find(x=>x.id===id);const c=courseOf(k?.courseId);return`${c?.code||''} ${k?.name||''}`.trim()};
 
 function personStats(sid,cid){
